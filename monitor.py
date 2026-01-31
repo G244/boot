@@ -4,8 +4,8 @@ import os
 import json
 
 # 配置
-GEMINI_API_KEY = AIzaSyANZZero_k6wPC6fJtJRfH8HkuoBKyX7lg
-WECOM_WEBHOOK_URL = https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=52b3dac7-fbdd-4f79-85c9-cec274b6151d
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+WECOM_WEBHOOK_URL = os.getenv("WECOM_WEBHOOK_URL")
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
 SOURCES = {
