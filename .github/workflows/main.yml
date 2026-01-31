@@ -1,21 +1,30 @@
-name: Daily Policy Check
+name: Daily Policy AI Check
 
 on:
   schedule:
-    - cron: '0 2 * * *' # 每天北京时间上午10:00执行一次
-  workflow_dispatch:      # 允许手动点击运行
+    # 北京时间每天上午 10:00 运行 (UTC 2:00)
+    - cron: '0 2 * * *'
+  # 支持手动点击按钮运行测试
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+
       - name: Install dependencies
         run: pip install requests
+
       - name: Run script
+        env:
+          # --- 关键改动在这里：把 Secrets 映射为环境变量 ---
+          GEMINI_API_KEY: AIzaSyANZZero_k6wPC6fJtJRfH8HkuoBKyX7lg
+          WECOM_WEBHOOK_URL: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=52b3dac7-fbdd-4f79-85c9-cec274b6151d
         run: python monitor.py
