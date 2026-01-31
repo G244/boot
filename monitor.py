@@ -14,7 +14,7 @@ SOURCES = {
 }
 
 def get_ai_summary(text):
-    """使用 Gemini 免费接口进行总结"""
+    """带日志诊断的 Gemini 总结函数"""
     headers = {'Content-Type': 'application/json'}
     prompt = f"你是一个App政策分析专家。请简洁总结下文的政策变动和对App开发者的风险影响（100字内）：\n\n{text}"
     payload = {
@@ -22,8 +22,16 @@ def get_ai_summary(text):
     }
     try:
         response = requests.post(GEMINI_URL, json=payload, headers=headers, timeout=20)
-        return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-    except:
+        res_json = response.json()
+        
+        # 诊断日志：如果出错，可以在 GitHub Actions 的日志里看到具体原因
+        if response.status_code != 200:
+            print(f"API报错详情: {res_json}")
+            return "（AI接口响应异常）"
+
+        return res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+    except Exception as e:
+        print(f"解析过程出错: {e}")
         return "（总结失败，请阅读原文）"
 
 def monitor():
