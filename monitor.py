@@ -68,24 +68,6 @@ def monitor_android_blog():
         send_wecom("🤖 Android Developer Blog", title, summary, link, "warning")
     except Exception as e: print(f"Android Blog Error: {e}")
 
-def monitor_google_deadline():
-    """3. 监控 Google Play 政策期限表 (网页爬取)"""
-    url = "https://support.google.com/googleplay/android-developer/table/12921780?hl=zh"
-    try:
-        res = requests.get(url, timeout=15)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        table = soup.find('table')
-        if table:
-            rows = table.find_all('tr')
-            if len(rows) > 1:
-                cols = rows[1].find_all('td')
-                deadline = cols[0].get_text(strip=True)
-                change = cols[1].get_text(strip=True)
-                title = f"Play 商店重要期限：{deadline}"
-                summary = get_kimi_summary("Google Play Deadline", title, change)
-                send_wecom("⚠️ Google Play 政策期限", title, summary, url, "comment")
-    except Exception as e: print(f"Google Table Error: {e}")
-
 if __name__ == "__main__":
     monitor_apple()
     monitor_android_blog()
