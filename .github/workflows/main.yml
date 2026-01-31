@@ -1,0 +1,21 @@
+name: Daily Policy Check
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # 每天北京时间上午10:00执行一次
+  workflow_dispatch:      # 允许手动点击运行
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Run script
+        run: python monitor.py
