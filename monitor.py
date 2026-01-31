@@ -1,4 +1,5 @@
 import requests
+from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 import os
 import json
@@ -8,90 +9,83 @@ KIMI_API_KEY = os.getenv("KIMI_API_KEY")
 WECOM_WEBHOOK_URL = os.getenv("WECOM_WEBHOOK_URL")
 KIMI_URL = "https://api.moonshot.cn/v1/chat/completions"
 
-# 监控源分类
-SOURCES = {
-    "iOS / Apple Store": {
-        "url": "https://developer.apple.com/news/rss/news.rss",
-        "color": "info"  # 蓝色
-    },
-    "Android / Google Play": {
-        "url": "https://android-developers.googleblog.com/feeds/posts/default",
-        "color": "warning"  # 橙色
-    }
-}
-
-def get_kimi_summary(platform, title, description):
-    """调用 Kimi AI 进行深度分类总结"""
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {KIMI_API_KEY}"
-    }
-    
-    # 强化提示词：要求 AI 从项目管理角度分析
+def get_kimi_summary(platform, title, detail):
+    """调用 Kimi AI 进行合规风险分析"""
+    headers = {"Authorization": f"Bearer {KIMI_API_KEY}", "Content-Type": "application/json"}
     prompt = (
-        f"你是一名跨境 App 项目管理专员，专注于 {platform} 平台的政策合规。\n"
-        f"标题：{title}\n"
-        f"详情：{description[:500]}\n\n"
-        "请从以下三个维度简要总结（150字内）：\n"
-        "1. 政策核心变动；\n"
-        "2. 对公司产品的潜在风险（如：需更新 SDK、隐私申明、强制停用等）；\n"
-        "3. 建议采取的行动。"
+        f"你是项目管理专员。请分析 {platform} 的最新动态：\n"
+        f"标题：{title}\n详情：{detail[:800]}\n\n"
+        "请回答：1.政策/技术核心变动；2.对产品的潜在风险；3.建议行动。100字内。"
     )
-    
     payload = {
         "model": "moonshot-v1-8k",
-        "messages": [
-            {"role": "system", "content": "你是一个专业的 App 审核政策分析助手。"},
-            {"role": "user", "content": prompt}
-        ],
+        "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3
     }
-    
     try:
         res = requests.post(KIMI_URL, json=payload, headers=headers, timeout=30)
         return res.json()['choices'][0]['message']['content'].strip()
     except:
-        return "（总结失败，请核对原文）"
+        return "（AI总结失败，请查阅原文）"
 
-def monitor():
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    for platform, info in SOURCES.items():
-        try:
-            res = requests.get(info['url'], headers=headers, timeout=15)
-            root = ET.fromstring(res.content)
-            
-            # 解析不同格式的条目
-            items = root.findall('.//item') or root.findall('.//{http://www.w3.org/2005/Atom}entry')
-            
-            # 我们获取最近的两条，确保不遗漏
-            for item in items[:2]:
-                title = item.find('title').text.strip()
-                # 尝试获取描述或内容以供 AI 分析
-                desc_node = item.find('description') or item.find('{http://www.w3.org/2005/Atom}summary')
-                description = desc_node.text if desc_node is not None else title
-                
-                link_node = item.find('link')
-                link = link_node.text if link_node is not None and link_node.text else link_node.attrib.get('href', "")
+def send_wecom(platform, title, summary, link, color):
+    """推送至企业微信"""
+    message = {
+        "msgtype": "markdown",
+        "markdown": {
+            "content": f"# <font color=\"{color}\">{platform}</font>\n**【标题】**：{title}\n\n**【AI风险解析】**：\n{summary}\n\n[查看详情链接]({link})"
+        }
+    }
+    requests.post(WECOM_WEBHOOK_URL, json=message)
 
-                # AI 总结
-                summary = get_kimi_summary(platform, title, description)
-                
-                # 企业微信分平台推送
-                color = info['color']
-                message = {
-                    "msgtype": "markdown",
-                    "markdown": {
-                        "content": (
-                            f"# <font color=\"{color}\">{platform} 政策更新</font>\n"
-                            f"**【标题】**：{title}\n\n"
-                            f"**【AI 深度解析】**：\n{summary}\n\n"
-                            f"**【原文链接】**：[点击跳转查看]({link})"
-                        )
-                    }
-                }
-                requests.post(WECOM_WEBHOOK_URL, json=message)
-        except Exception as e:
-            print(f"解析 {platform} 失败: {e}")
+def monitor_apple():
+    """1. 监控 iOS / Apple Store 新闻 (RSS)"""
+    url = "https://developer.apple.com/news/rss/news.rss"
+    try:
+        res = requests.get(url, timeout=15)
+        root = ET.fromstring(res.content)
+        item = root.findall('.//item')[0]
+        title = item.find('title').text
+        link = item.find('link').text
+        desc = item.find('description').text if item.find('description') is not None else title
+        summary = get_kimi_summary("iOS / Apple", title, desc)
+        send_wecom("🍏 iOS / Apple Store", title, summary, link, "info")
+    except Exception as e: print(f"Apple Error: {e}")
+
+def monitor_android_blog():
+    """2. 监控 Android 官方博客 (Atom Feed)"""
+    url = "https://android-developers.googleblog.com/feeds/posts/default"
+    try:
+        res = requests.get(url, timeout=15)
+        root = ET.fromstring(res.content)
+        # Atom 格式使用 entry 标签
+        entry = root.find('{http://www.w3.org/2005/Atom}entry')
+        title = entry.find('{http://www.w3.org/2005/Atom}title').text
+        link = entry.find('{http://www.w3.org/2005/Atom}link').attrib.get('href', "")
+        summary_text = entry.find('{http://www.w3.org/2005/Atom}content').text or title
+        
+        summary = get_kimi_summary("Android Blog", title, summary_text)
+        send_wecom("🤖 Android Developer Blog", title, summary, link, "warning")
+    except Exception as e: print(f"Android Blog Error: {e}")
+
+def monitor_google_deadline():
+    """3. 监控 Google Play 政策期限表 (网页爬取)"""
+    url = "https://support.google.com/googleplay/android-developer/table/12921780?hl=zh"
+    try:
+        res = requests.get(url, timeout=15)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        table = soup.find('table')
+        if table:
+            rows = table.find_all('tr')
+            if len(rows) > 1:
+                cols = rows[1].find_all('td')
+                deadline = cols[0].get_text(strip=True)
+                change = cols[1].get_text(strip=True)
+                title = f"Play 商店重要期限：{deadline}"
+                summary = get_kimi_summary("Google Play Deadline", title, change)
+                send_wecom("⚠️ Google Play 政策期限", title, summary, url, "comment")
+    except Exception as e: print(f"Google Table Error: {e}")
 
 if __name__ == "__main__":
-    monitor()
+    monitor_apple()
+    monitor_android_blog()
